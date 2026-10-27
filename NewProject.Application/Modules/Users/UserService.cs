@@ -20,16 +20,20 @@ namespace NewProject.Application.Modules.Users
             bool includeInactive = true,
             CancellationToken cancellationToken = default)
         {
-            var accounts = await _ctx.IDMAccounts
-                .AsNoTracking()
-                .Where(x => includeInactive || x.IsActive)
-                .OrderBy(x => x.FullName)
+            // El Id expuesto es MFR_EMPLOYEES.ID; la relación con IDM_ACCOUNT es por DOMAIN_USER_NAME.
+            var rows = await (from account in _ctx.IDMAccounts.AsNoTracking()
+                              join employee in _ctx.Employees.AsNoTracking()
+                                  on account.DomainUserName equals employee.DomainUserName
+                              where includeInactive || account.IsActive
+                              orderby account.FullName
+                              select new { Account = account, EmployeeId = employee.Id })
                 .ToListAsync(cancellationToken);
 
             var userDtos = new List<UserDto>();
 
-            foreach (var account in accounts)
+            foreach (var row in rows)
             {
+                var account = row.Account;
                 var roles = await _ctx.IDMAccountRoles
                     .AsNoTracking()
                     .Where(x => x.AccountId == account.Id)
@@ -42,7 +46,7 @@ namespace NewProject.Application.Modules.Users
 
                 userDtos.Add(new UserDto
                 {
-                    Id = account.Id,
+                    Id = row.EmployeeId,
                     DomainUserName = account.DomainUserName,
                     FullName = account.FullName,
                     Email = account.Email,
@@ -59,9 +63,7 @@ namespace NewProject.Application.Modules.Users
             int id,
             CancellationToken cancellationToken = default)
         {
-            var account = await _ctx.IDMAccounts
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            var account = await FindAccountByEmployeeIdAsync(id, false, cancellationToken);
 
             if (account == null)
             {
@@ -70,7 +72,7 @@ namespace NewProject.Application.Modules.Users
 
             var roles = await _ctx.IDMAccountRoles
                 .AsNoTracking()
-                .Where(x => x.AccountId == id)
+                .Where(x => x.AccountId == account.Id)
                 .Join(
                     _ctx.IDMRoles.AsNoTracking(),
                     ar => ar.RoleId,
@@ -80,7 +82,7 @@ namespace NewProject.Application.Modules.Users
 
             var userDto = new UserDto
             {
-                Id = account.Id,
+                Id = id,
                 DomainUserName = account.DomainUserName,
                 FullName = account.FullName,
                 Email = account.Email,
@@ -106,22 +108,21 @@ namespace NewProject.Application.Modules.Users
                 return ServiceResult<UserDto>.BadRequest("El rol indicado no existe o está inactivo.");
             }
 
-            var account = await _ctx.IDMAccounts
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            var account = await FindAccountByEmployeeIdAsync(id, true, cancellationToken);
             if (account == null)
             {
                 return ServiceResult<UserDto>.NotFound("Usuario no encontrado.");
             }
 
             var accountRoles = await _ctx.IDMAccountRoles
-                .Where(x => x.AccountId == id)
+                .Where(x => x.AccountId == account.Id)
                 .ToListAsync(cancellationToken);
             _ctx.IDMAccountRoles.RemoveRange(accountRoles.Where(x => x.RoleId != role.Id));
             if (!accountRoles.Any(x => x.RoleId == role.Id))
             {
                 _ctx.IDMAccountRoles.Add(new IDMAccountRole
                 {
-                    AccountId = id,
+                    AccountId = account.Id,
                     RoleId = role.Id
                 });
             }
@@ -157,8 +158,7 @@ namespace NewProject.Application.Modules.Users
             }
 
             // Verificar que la cuenta existe
-            var account = await _ctx.IDMAccounts
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            var account = await FindAccountByEmployeeIdAsync(id, true, cancellationToken);
             if (account == null)
             {
                 return ServiceResult<UserDto>.NotFound("Usuario no encontrado.");
@@ -166,7 +166,7 @@ namespace NewProject.Application.Modules.Users
 
             // Sincronizar por diferencias: la llave es (AccountId, RoleId) y no se puede borrar y reinsertar el mismo par.
             var existingAccountRoles = await _ctx.IDMAccountRoles
-                .Where(x => x.AccountId == id)
+                .Where(x => x.AccountId == account.Id)
                 .ToListAsync(cancellationToken);
             var targetRoleIds = roles.Select(r => r.Id).ToHashSet();
 
@@ -178,7 +178,7 @@ namespace NewProject.Application.Modules.Users
             {
                 _ctx.IDMAccountRoles.Add(new IDMAccountRole
                 {
-                    AccountId = id,
+                    AccountId = account.Id,
                     RoleId = role.Id
                 });
             }
@@ -212,8 +212,7 @@ namespace NewProject.Application.Modules.Users
             int? currentUserId = null,
             CancellationToken cancellationToken = default)
         {
-            var account = await _ctx.IDMAccounts
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            var account = await FindAccountByEmployeeIdAsync(id, true, cancellationToken);
 
             if (account == null)
             {
@@ -227,6 +226,26 @@ namespace NewProject.Application.Modules.Users
             await _ctx.SaveChangesAsync(cancellationToken);
 
             return await GetByIdAsync(id, cancellationToken);
+        }
+
+        private async Task<IDMAccount?> FindAccountByEmployeeIdAsync(
+            int employeeId,
+            bool track,
+            CancellationToken cancellationToken)
+        {
+            var domainUserName = await _ctx.Employees
+                .AsNoTracking()
+                .Where(x => x.Id == employeeId)
+                .Select(x => x.DomainUserName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(domainUserName))
+            {
+                return null;
+            }
+
+            var query = track ? _ctx.IDMAccounts : _ctx.IDMAccounts.AsNoTracking();
+            return await query.FirstOrDefaultAsync(x => x.DomainUserName == domainUserName, cancellationToken);
         }
             }
         }

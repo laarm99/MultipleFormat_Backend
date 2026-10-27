@@ -226,17 +226,17 @@ namespace MultipleFormat.Application.Modules.FormRequests
 
                 if (approverAccount != null)
                 {
-                    var position = await _ctx.Employees
+                    var approverEmployee = await _ctx.Employees
                         .AsNoTracking()
                         .Where(x => x.DomainUserName == approverAccount.DomainUserName)
-                        .Select(x => x.Position)
+                        .Select(x => new { x.Id, x.Position })
                         .FirstOrDefaultAsync(cancellationToken);
 
                     approver = new ApproverDto
                     {
-                        Id = approverAccount.Id,
+                        Id = approverEmployee?.Id ?? 0,
                         Name = approverAccount.FullName,
-                        Position = position
+                        Position = approverEmployee?.Position
                     };
                 }
             }

@@ -162,6 +162,63 @@ namespace MultipleFormat.Application.Modules.Supervisors
             }
 
             await _ctx.SaveChangesAsync(cancellationToken);
+
+            // Si el supervisor también es empleado, completar usuario de dominio y correo.
+            var allEmployees = await _ctx.Employees
+                .AsNoTracking()
+                .OrderBy(x => x.Id)
+                .ToListAsync(cancellationToken);
+            var employeesByName = new Dictionary<string, Employee>();
+            foreach (var emp in allEmployees)
+            {
+                employeesByName.TryAdd(NormalizeName(emp.FullName), emp);
+            }
+
+            var usedUserNames = supervisorsByName.Values
+                .Where(x => x.DomainUserName != null)
+                .Select(x => x.DomainUserName!)
+                .ToHashSet();
+
+            foreach (var supervisor in supervisorsByName.Values.Where(x => x.DomainUserName == null))
+            {
+                if (employeesByName.TryGetValue(supervisor.NormalizedName, out var match) &&
+                    !string.IsNullOrWhiteSpace(match.DomainUserName) &&
+                    usedUserNames.Add(match.DomainUserName))
+                {
+                    supervisor.DomainUserName = match.DomainUserName;
+                    supervisor.Email = string.IsNullOrWhiteSpace(match.Email) ? null : match.Email;
+                }
+            }
+
+            // Rol Supervisor para los que ya tienen cuenta IDM.
+            var supervisorRole = await _ctx.IDMRoles
+                .FirstOrDefaultAsync(x => x.RoleName == "Supervisor" && x.IsActive, cancellationToken);
+            if (supervisorRole != null)
+            {
+                var userNames = supervisorsByName.Values
+                    .Where(x => x.DomainUserName != null)
+                    .Select(x => x.DomainUserName!)
+                    .ToList();
+                var accountIds = await _ctx.IDMAccounts
+                    .Where(x => userNames.Contains(x.DomainUserName))
+                    .Select(x => x.Id)
+                    .ToListAsync(cancellationToken);
+                var withRole = (await _ctx.IDMAccountRoles
+                    .Where(x => x.RoleId == supervisorRole.Id)
+                    .Select(x => x.AccountId)
+                    .ToListAsync(cancellationToken)).ToHashSet();
+
+                foreach (var accountId in accountIds.Where(x => !withRole.Contains(x)))
+                {
+                    _ctx.IDMAccountRoles.Add(new IDMAccountRole
+                    {
+                        AccountId = accountId,
+                        RoleId = supervisorRole.Id
+                    });
+                }
+            }
+
+            await _ctx.SaveChangesAsync(cancellationToken);
             return ServiceResult<int>.Success(created);
         }
 
