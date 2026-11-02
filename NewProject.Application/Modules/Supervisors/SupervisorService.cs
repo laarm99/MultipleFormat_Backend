@@ -33,7 +33,13 @@ namespace MultipleFormat.Application.Modules.Supervisors
                     FullName = x.FullName,
                     DomainUserName = x.DomainUserName,
                     Email = x.Email,
-                    IsActive = x.IsActive
+                    IsActive = x.IsActive,
+                    EmployeeNumber = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.EmployeeNumber).FirstOrDefault(),
+                    Shift = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.Shift).FirstOrDefault(),
+                    Department = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.Department).FirstOrDefault(),
+                    Position = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.Position).FirstOrDefault(),
+                    HireDate = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.HireDate).FirstOrDefault(),
+                    SupervisorName = _ctx.Employees.Where(e => e.DomainUserName == x.DomainUserName).Select(e => e.SupervisorName).FirstOrDefault()
                 })
                 .ToListAsync(cancellationToken);
 

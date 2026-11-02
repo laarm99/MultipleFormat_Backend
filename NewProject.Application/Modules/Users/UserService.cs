@@ -26,7 +26,7 @@ namespace NewProject.Application.Modules.Users
                                   on account.DomainUserName equals employee.DomainUserName
                               where includeInactive || account.IsActive
                               orderby account.FullName
-                              select new { Account = account, EmployeeId = employee.Id })
+                              select new { Account = account, EmployeeId = employee.Id, Employee = employee })
                 .ToListAsync(cancellationToken);
 
             var userDtos = new List<UserDto>();
@@ -52,7 +52,13 @@ namespace NewProject.Application.Modules.Users
                     Email = account.Email,
                     IsActive = account.IsActive,
                     Roles = roles,
-                    CreatedDate = account.CreatedDate
+                    CreatedDate = account.CreatedDate,
+                    EmployeeNumber = row.Employee.EmployeeNumber,
+                    Shift = row.Employee.Shift,
+                    Department = row.Employee.Department,
+                    Position = row.Employee.Position,
+                    HireDate = row.Employee.HireDate,
+                    SupervisorName = row.Employee.SupervisorName
                 });
             }
 
