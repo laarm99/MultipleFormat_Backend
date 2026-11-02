@@ -196,22 +196,6 @@ namespace NewProject.Application.Modules.Users
             return await GetByIdAsync(id, cancellationToken);
         }
 
-        public Task<bool> IsAdministratorAsync(
-            string? domainUserName,
-            CancellationToken cancellationToken = default)
-        {
-            var normalizedUserName = SupervisorService.NormalizeDomainUserName(domainUserName);
-            return (from account in _ctx.IDMAccounts.AsNoTracking()
-                    join accountRole in _ctx.IDMAccountRoles.AsNoTracking()
-                        on account.Id equals accountRole.AccountId
-                    join role in _ctx.IDMRoles.AsNoTracking()
-                        on accountRole.RoleId equals role.Id
-                    where account.IsActive && role.IsActive &&
-                          account.DomainUserName == normalizedUserName &&
-                          role.RoleName == "Admin"
-                    select account.Id).AnyAsync(cancellationToken);
-        }
-
         public async Task<ServiceResult<UserDto>> ToggleActiveAsync(
             int id,
             bool isActive,

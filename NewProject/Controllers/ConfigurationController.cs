@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MultipleFormat.Application.Modules.Supervisors;
 using MultipleFormat.Application.Modules.Supervisors.DTOs;
+using NewProject.Application.Common.CurrentUser;
 using NewProject.Application.Modules.Users;
 using NewProject.Application.Modules.Users.DTOs;
-using System.Security.Claims;
 
 namespace NewProject.Controllers
 {
@@ -15,13 +15,16 @@ namespace NewProject.Controllers
     {
         private readonly SupervisorService _supervisorService;
         private readonly UserService _userService;
+        private readonly ICurrentUserService _currentUserService;
 
         public ConfigurationController(
             SupervisorService supervisorService,
-            UserService userService)
+            UserService userService,
+            ICurrentUserService currentUserService)
         {
             _supervisorService = supervisorService;
             _userService = userService;
+            _currentUserService = currentUserService;
         }
 
         #region Supervisores
@@ -65,7 +68,7 @@ namespace NewProject.Controllers
                 return Forbid();
             }
 
-            var currentUserId = GetCurrentAccountId();
+            var currentUserId = await GetCurrentAccountIdAsync(cancellationToken);
             var result = await _supervisorService.UpdateAsync(id, request, currentUserId, cancellationToken);
             return result.IsSuccess
                 ? Ok(result)
@@ -83,11 +86,42 @@ namespace NewProject.Controllers
                 return Forbid();
             }
 
-            var currentUserId = GetCurrentAccountId();
+            var currentUserId = await GetCurrentAccountIdAsync(cancellationToken);
             var result = await _supervisorService.ToggleActiveAsync(id, request.IsActive, currentUserId, cancellationToken);
             return result.IsSuccess
                 ? Ok(result)
                 : StatusCode((int)result.StatusCode, result);
+        }
+
+        [HttpPost("supervisors/sync-from-employees")]
+        public async Task<IActionResult> SyncSupervisorsFromEmployees(CancellationToken cancellationToken = default)
+        {
+            if (!await IsAdministratorAsync(cancellationToken))
+            {
+                return Forbid();
+            }
+
+            var result = await _supervisorService.SyncFromEmployeesAsync(cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpPut("supervisors/employees/{employeeId:int}")]
+        public async Task<IActionResult> AssignEmployeeSupervisor(
+            int employeeId,
+            AssignEmployeeSupervisorRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!await IsAdministratorAsync(cancellationToken))
+            {
+                return Forbid();
+            }
+
+            var result = await _supervisorService.AssignEmployeeAsync(
+                employeeId,
+                request.SupervisorId,
+                cancellationToken);
+
+            return result.IsSuccess ? Ok(result) : NotFound(result);
         }
 
         #endregion
@@ -122,24 +156,6 @@ namespace NewProject.Controllers
             return result.IsSuccess ? Ok(result) : NotFound(result);
         }
 
-        [HttpPut("users/{id:int}/role")]
-        public async Task<IActionResult> UpdateUserRole(
-            int id,
-            UpdateUserRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            if (!await IsAdministratorAsync(cancellationToken))
-            {
-                return Forbid();
-            }
-
-            var currentUserId = GetCurrentAccountId();
-            var result = await _userService.UpdateAsync(id, request, currentUserId, cancellationToken);
-            return result.IsSuccess
-                ? Ok(result)
-                : StatusCode((int)result.StatusCode, result);
-        }
-
         [HttpPut("users/{id:int}/roles")]
         public async Task<IActionResult> UpdateUserRoles(
             int id,
@@ -151,7 +167,7 @@ namespace NewProject.Controllers
                 return Forbid();
             }
 
-            var currentUserId = GetCurrentAccountId();
+            var currentUserId = await GetCurrentAccountIdAsync(cancellationToken);
             var result = await _userService.UpdateRolesAsync(id, request, currentUserId, cancellationToken);
             return result.IsSuccess
                 ? Ok(result)
@@ -169,7 +185,7 @@ namespace NewProject.Controllers
                 return Forbid();
             }
 
-            var currentUserId = GetCurrentAccountId();
+            var currentUserId = await GetCurrentAccountIdAsync(cancellationToken);
             var result = await _userService.ToggleActiveAsync(id, request.IsActive, currentUserId, cancellationToken);
             return result.IsSuccess
                 ? Ok(result)
@@ -181,20 +197,10 @@ namespace NewProject.Controllers
         #region Helpers
 
         private Task<bool> IsAdministratorAsync(CancellationToken cancellationToken)
-        {
-            var identityName = User.FindFirstValue(ClaimTypes.Name) ?? User.Identity?.Name;
-            return _userService.IsAdministratorAsync(identityName, cancellationToken);
-        }
+            => _currentUserService.IsAdministratorAsync(User, cancellationToken);
 
-        private int? GetCurrentAccountId()
-        {
-            var accountIdClaim = User.FindFirstValue("AccountId");
-            if (int.TryParse(accountIdClaim, out var accountId))
-            {
-                return accountId;
-            }
-            return null;
-        }
+        private Task<int?> GetCurrentAccountIdAsync(CancellationToken cancellationToken)
+            => _currentUserService.GetAccountIdAsync(User, cancellationToken);
 
         #endregion
     }

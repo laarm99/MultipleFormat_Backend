@@ -27,24 +27,11 @@ namespace NewProject.Application.Common.CurrentUser
                 return ServiceResult<CurrentUserDto>.NotFound("User not authenticated.");
             }
 
-            var windowsName = identity.Name?.Trim();
-            if (string.IsNullOrWhiteSpace(windowsName))
+            var userName = NormalizeUserName(identity.Name);
+            if (string.IsNullOrEmpty(userName))
             {
                 return ServiceResult<CurrentUserDto>.NotFound("Invalid user name.");
             }
-
-            var parts = windowsName.Split('\\');
-            string userName;
-            if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
-            {
-                userName = parts[1].Trim();
-            }
-            else
-            {
-                userName = windowsName;
-            }
-
-            userName = userName.ToUpperInvariant();
 
             var employee = await _ctx.Set<Employee>()
                 .AsNoTracking()
@@ -77,6 +64,58 @@ namespace NewProject.Application.Common.CurrentUser
             };
 
             return ServiceResult<CurrentUserDto>.Success(dto);
+        }
+
+        public async Task<int?> GetAccountIdAsync(ClaimsPrincipal user, CancellationToken cancellationToken = default)
+        {
+            var userName = NormalizeUserName(user?.Identity?.Name);
+            if (string.IsNullOrEmpty(userName))
+            {
+                return null;
+            }
+
+            return await _ctx.IDMAccounts
+                .AsNoTracking()
+                .Where(x => x.DomainUserName == userName && x.IsActive)
+                .Select(x => (int?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<bool> IsAdministratorAsync(ClaimsPrincipal user, CancellationToken cancellationToken = default)
+        {
+            var userName = NormalizeUserName(user?.Identity?.Name);
+            if (string.IsNullOrEmpty(userName))
+            {
+                return false;
+            }
+
+            return await (from account in _ctx.IDMAccounts.AsNoTracking()
+                          join accountRole in _ctx.IDMAccountRoles.AsNoTracking()
+                              on account.Id equals accountRole.AccountId
+                          join role in _ctx.IDMRoles.AsNoTracking()
+                              on accountRole.RoleId equals role.Id
+                          where account.IsActive && role.IsActive &&
+                                account.DomainUserName == userName &&
+                                role.RoleName == "Admin"
+                          select account.Id).AnyAsync(cancellationToken);
+        }
+
+        // Quita el dominio (DOMINIO\usuario) y pasa a mayúsculas.
+        private static string NormalizeUserName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var trimmed = value.Trim();
+            var separator = trimmed.LastIndexOf('\\');
+            if (separator >= 0)
+            {
+                trimmed = trimmed[(separator + 1)..].Trim();
+            }
+
+            return trimmed.ToUpperInvariant();
         }
     }
 }

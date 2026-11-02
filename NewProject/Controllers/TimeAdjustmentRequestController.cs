@@ -35,6 +35,11 @@ namespace MultipleFormat.Web.Controllers
             }
 
             CurrentUserDto employee = currentUserResult.Data!;
+            if (employee.Id <= 0)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo los empleados registrados pueden crear solicitudes." });
+            }
+
             if (employee.AccountId is not int createdById)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = "La cuenta del usuario no está configurada." });
