@@ -44,7 +44,7 @@ namespace MultipleFormat.Application.Modules.FormRequests
     {
         private const double Left = 30;
         private const double Width = 552;
-        private static readonly CultureInfo DateCulture = CultureInfo.InvariantCulture;
+        private static readonly CultureInfo DateCulture = new CultureInfo("es-MX");
 
         static MultipleFormatPdfBuilder()
         {
@@ -75,8 +75,7 @@ namespace MultipleFormat.Application.Modules.FormRequests
             double y = 30;
 
             // Encabezado
-            g.DrawString("PRODRIVEN", logo, XBrushes.Black, new XRect(Left, y, 130, 24), XStringFormats.TopLeft);
-            g.DrawString("GLOBAL BRANDS", bold, XBrushes.Black, new XRect(Left + 22, y + 22, 110, 12), XStringFormats.TopLeft);
+            DrawLogo(g, Left, y, 130, 36);
             Cell(g, Left + 140, y, 200, 18, "FECHA", bold, center: true, fill: XBrushes.LightGray);
             Cell(g, Left + 340, y, 212, 18, Fmt(d.Date), bold, center: true);
             Cell(g, Left + 140, y + 18, 412, 18, "FORMATO MULTIPLE DE PERSONAL", title, center: true);
@@ -175,6 +174,19 @@ namespace MultipleFormat.Application.Modules.FormRequests
             return stream.ToArray();
         }
 
+        private static void DrawLogo(XGraphics g, double x, double y, double maxW, double maxH)
+        {
+            using var resource = typeof(MultipleFormatPdfBuilder).Assembly.GetManifestResourceStream("prodriven-logo.png");
+            if (resource == null)
+            {
+                return;
+            }
+
+            using var image = XImage.FromStream(resource);
+            var scale = Math.Min(maxW / image.PointWidth, maxH / image.PointHeight);
+            g.DrawImage(image, x, y, image.PointWidth * scale, image.PointHeight * scale);
+        }
+
         private static void DrawFooter(XGraphics g)
         {
             g.DrawString($"Aplicación desarrollada por el departamento de IT © {DateTime.Now.Year}",
@@ -195,7 +207,7 @@ namespace MultipleFormat.Application.Modules.FormRequests
             var logo = new XFont("Arial", 20, XFontStyleEx.BoldItalic);
 
             double y = 30;
-            g.DrawString("WERNERCO", logo, XBrushes.Black, new XRect(Left, y, 200, 26), XStringFormats.TopLeft);
+            DrawLogo(g, Left, y, 180, 36);
             Cell(g, Left + 200, y, 352, 30, "NOTIFICACION Y APROBACION AJUSTE DE CHECADAS", title, center: true);
             y += 40;
             Cell(g, Left + 340, y, 80, 16, "FECHA", bold, center: true, fill: XBrushes.LightGray);
@@ -203,12 +215,21 @@ namespace MultipleFormat.Application.Modules.FormRequests
             y += 36;
 
             // Columnas: no. empleado, nombre, fecha, entrada, salida, motivo
-            double[] w = { 60, 120, 70, 50, 50, 202 };
-            string[] heads = { "NUMERO DE EMPLEADO", "NOMBRE", "FECHA", "HORA ENTRADA", "HORA SALIDA", "MOTIVO DE AJUSTE" };
+            double[] w = { 62, 136, 76, 48, 48, 182 };
+            string[] heads = { "NUMERO DE\nEMPLEADO", "NOMBRE", "FECHA", "HORA\nENTRADA", "HORA\nSALIDA", "MOTIVO DE AJUSTE" };
             double x = Left;
+            var headFont = new XFont("Arial", 6.5, XFontStyleEx.Bold);
             for (int i = 0; i < w.Length; i++)
             {
-                Cell(g, x, y, w[i], 30, heads[i], new XFont("Arial", 6.5, XFontStyleEx.Bold), center: true, fill: XBrushes.LightGray);
+                g.DrawRectangle(XPens.Black, XBrushes.LightGray, new XRect(x, y, w[i], 30));
+                var lines = heads[i].Split('\n');
+                double lineH = 8;
+                double ty = y + (30 - lines.Length * lineH) / 2;
+                foreach (var line in lines)
+                {
+                    g.DrawString(line, headFont, XBrushes.Black, new XRect(x, ty, w[i], lineH), XStringFormats.TopCenter);
+                    ty += lineH;
+                }
                 x += w[i];
             }
             y += 30;
@@ -264,6 +285,12 @@ namespace MultipleFormat.Application.Modules.FormRequests
             if (!string.IsNullOrEmpty(text))
             {
                 var inner = new XRect(x + 3, y, w - 6, h);
+                var size = font.Size;
+                while (size > 5 && g.MeasureString(text, font).Width > inner.Width)
+                {
+                    size -= 0.5;
+                    font = new XFont(font.FontFamily.Name, size, font.Style);
+                }
                 g.DrawString(text, font, XBrushes.Black, inner,
                     center ? XStringFormats.Center : XStringFormats.CenterLeft);
             }
@@ -293,11 +320,11 @@ namespace MultipleFormat.Application.Modules.FormRequests
             var x = Left + 100;
             Cell(g, x, y, 50, 14, "NUM. DE DIAS", bold, center: true);
             Cell(g, x + 50, y, 100, 14, "FECHA DE INICIO", bold, center: true);
-            Cell(g, x + 150, y, 100, 14, "FECHA DE TÃ‰RMINO", bold, center: true);
+            Cell(g, x + 150, y, 100, 14, "FECHA DE T\u00C9RMINO", bold, center: true);
             Cell(g, x, y + 14, 50, 18, d?.Days?.ToString(), normal, center: true);
             Cell(g, x + 50, y + 14, 100, 18, Fmt(d?.StartDate), normal, center: true);
             Cell(g, x + 150, y + 14, 100, 18, Fmt(d?.EndDate), normal, center: true);
-            Cell(g, x, y + 32, 250, 14, "SE PRESENTARÃ A TRABAJAR EL DIA:", bold, center: true);
+            Cell(g, x, y + 32, 250, 14, "SE PRESENTAR\u00C1 A TRABAJAR EL DIA:", bold, center: true);
             Cell(g, x, y + 46, 250, 18, Fmt(d?.ReturnDate), normal, center: true);
         }
     }

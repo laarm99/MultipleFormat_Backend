@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\prodriven-logo.png" LogicalName="prodriven-logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Mapping\" />
   </ItemGroup>
 
